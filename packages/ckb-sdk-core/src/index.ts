@@ -1,7 +1,7 @@
 /// <reference types="../types/global" />
 
 import RPC from '@nervosnetwork/ckb-sdk-rpc'
-import { assertToBeHexString} from '@nervosnetwork/ckb-sdk-utils/lib/validators'
+import { assertToBeHexString } from '@nervosnetwork/ckb-sdk-utils/lib/validators'
 import { ArgumentRequired } from '@nervosnetwork/ckb-sdk-utils/lib/exceptions'
 import * as utils from '@nervosnetwork/ckb-sdk-utils'
 
@@ -9,8 +9,7 @@ import generateRawTransaction, { Cell, RawTransactionParamsBase } from './genera
 
 import loadCells from './loadCells'
 import signWitnesses, { isMap } from './signWitnesses'
-import {calculateLockEpochs} from './utils'
-
+import { calculateLockEpochs } from './utils'
 
 type Key = string
 type Address = string
@@ -29,12 +28,11 @@ interface RawTransactionParams extends RawTransactionParamsBase {
 
 interface ComplexRawTransactoinParams extends RawTransactionParamsBase {
   fromAddresses: Address[]
-  receivePairs: {address: Address, capacity: Capacity}[],
+  receivePairs: { address: Address; capacity: Capacity }[]
   cells: Map<LockHash, CachedCell[]>
 }
 
 const hrpSize = 6
-
 
 class CKB {
   public cells: Map<LockHash, CachedCell[]> = new Map()
@@ -50,7 +48,7 @@ class CKB {
     daoDep?: DepCellInfo
   } = {}
 
-  constructor (nodeUrl: URL = 'http://localhost:8114') {
+  constructor(nodeUrl: URL = 'http://localhost:8114') {
     this._node = {
       url: nodeUrl,
     }
@@ -83,7 +81,7 @@ class CKB {
     this.rpc.addMethod(computeScriptHashMethod)
   }
 
-  public setNode (node: URL | CKBComponents.Node): CKBComponents.Node {
+  public setNode(node: URL | CKBComponents.Node): CKBComponents.Node {
     if (typeof node === 'string') {
       this._node.url = node
     } else {
@@ -95,7 +93,7 @@ class CKB {
     return this._node
   }
 
-  public get node (): CKBComponents.Node {
+  public get node(): CKBComponents.Node {
     return this._node
   }
 
@@ -204,11 +202,9 @@ class CKB {
 
   public signWitnesses = signWitnesses
 
-  public signTransaction = (
-    key: Key | Map<LockHash, Key>
-  ) => (
+  public signTransaction = (key: Key | Map<LockHash, Key>) => async (
     transaction: CKBComponents.RawTransactionToSign,
-    cells: CachedCell[]
+    cells: CachedCell[],
   ) => {
     if (!key) throw new ArgumentRequired('Private key or address object')
     if (!transaction) throw new ArgumentRequired('Transaction')
@@ -218,25 +214,27 @@ class CKB {
 
     const transactionHash = this.utils.rawTransactionToHash(transaction)
 
-    const inputCells = isMap(key) ? transaction.inputs.map(input => {
-      const outPoint = input.previousOutput
-      /* eslint-disable prettier/prettier, no-undef */
-      const cell = cells.find(c => c.outPoint?.txHash === outPoint?.txHash && c.outPoint?.index === outPoint?.index)
-      /* eslint-enable prettier/prettier, no-undef */
-      if (!cell) {
-        throw new Error(`Cell of ${JSON.stringify(outPoint)} is not found`)
-      }
-      return cell
-    }) : undefined
+    const inputCells = isMap(key)
+      ? transaction.inputs.map((input) => {
+          const outPoint = input.previousOutput
+          /* eslint-disable prettier/prettier, no-undef */
+        const cell = cells.find(c => c.outPoint?.txHash === outPoint?.txHash && c.outPoint?.index === outPoint?.index)
+        /* eslint-enable prettier/prettier, no-undef */
+          if (!cell) {
+            throw new Error(`Cell of ${JSON.stringify(outPoint)} is not found`)
+          }
+          return cell
+        })
+      : undefined
 
-    const signedWitnesses = this.signWitnesses(key)({
+    const signedWitnesses = await this.signWitnesses(key)({
       transactionHash,
       witnesses: transaction.witnesses,
       inputCells,
     })
     return {
       ...transaction,
-      witnesses: signedWitnesses.map(witness =>
+      witnesses: signedWitnesses.map((witness) =>
         typeof witness === 'string' ? witness : this.utils.serializeWitnessArgs(witness),
       ),
     }
@@ -252,8 +250,9 @@ class CKB {
   }: RawTransactionParams | ComplexRawTransactoinParams) => {
     if ('fromAddress' in params && 'toAddress' in params) {
       let availableCells = params.cells || []
-      const [fromPublicKeyHash, toPublicKeyHash] =
-        [params.fromAddress, params.toAddress].map(this.extractPayloadFromAddress)
+      const [fromPublicKeyHash, toPublicKeyHash] = [params.fromAddress, params.toAddress].map(
+        this.extractPayloadFromAddress,
+      )
       if (!availableCells.length && deps) {
         const lockHash = this.utils.scriptToHash({
           codeHash: deps.codeHash,
@@ -280,7 +279,7 @@ class CKB {
 
     if ('fromAddresses' in params && 'receivePairs' in params) {
       const fromPublicKeyHashes = params.fromAddresses.map(this.extractPayloadFromAddress)
-      const receivePairs = params.receivePairs.map(pair => ({
+      const receivePairs = params.receivePairs.map((pair) => ({
         publicKeyHash: this.extractPayloadFromAddress(pair.address),
         capacity: pair.capacity,
       }))
@@ -357,7 +356,7 @@ class CKB {
     const tx = await this.rpc.getTransaction(outPoint.txHash)
     if (tx.txStatus.status !== 'committed') throw new Error('Transaction is not committed yet')
 
-    const depositBlockHeader = await this.rpc.getBlock(tx.txStatus.blockHash).then(b => b.header)
+    const depositBlockHeader = await this.rpc.getBlock(tx.txStatus.blockHash).then((b) => b.header)
     const encodedBlockNumber = this.utils.toHexInLittleEndian(depositBlockHeader.number, 8)
 
     const fromAddress = this.utils.bech32Address(cellStatus.cell.output.lock.args)
@@ -415,13 +414,13 @@ class CKB {
     )
     /* eslint-enable */
 
-    const depositBlockHeader = await this.rpc.getBlockByNumber(BigInt(depositBlockNumber)).then(block => block.header)
+    const depositBlockHeader = await this.rpc.getBlockByNumber(BigInt(depositBlockNumber)).then((block) => block.header)
     const depositEpoch = this.utils.parseEpoch(depositBlockHeader.epoch)
 
-    const withdrawBlockHeader = await this.rpc.getBlock(tx.txStatus.blockHash).then(block => block.header)
+    const withdrawBlockHeader = await this.rpc.getBlock(tx.txStatus.blockHash).then((block) => block.header)
     const withdrawEpoch = this.utils.parseEpoch(withdrawBlockHeader.epoch)
 
-    const lockEpochs = calculateLockEpochs({withdrawEpoch,depositEpoch,DAO_LOCK_PERIOD_EPOCHS})
+    const lockEpochs = calculateLockEpochs({ withdrawEpoch, depositEpoch, DAO_LOCK_PERIOD_EPOCHS })
     const minimalSince = this.absoluteEpochSince({
       length: `0x${JSBI.BigInt(depositEpoch.length).toString(16)}`,
       index: `0x${JSBI.BigInt(depositEpoch.index).toString(16)}`,
@@ -436,7 +435,7 @@ class CKB {
 
     const outputs: CKBComponents.CellOutput[] = [
       {
-        capacity: `0x${(JSBI.subtract(targetCapacity , targetFee)).toString(16)}`,
+        capacity: `0x${JSBI.subtract(targetCapacity, targetFee).toString(16)}`,
         lock: tx.transaction.outputs[+withdrawOutPoint.index].lock,
       },
     ]
@@ -477,14 +476,15 @@ class CKB {
     index: string
     number: string
   }): string => {
-    const {JSBI} = this.utils
+    const { JSBI } = this.utils
     assertToBeHexString(length)
     assertToBeHexString(index)
     assertToBeHexString(number)
     const epochSince = JSBI.add(
       JSBI.add(
         JSBI.add(
-          JSBI.leftShift(JSBI.BigInt(0x20), JSBI.BigInt(56)), JSBI.leftShift(JSBI.BigInt(length), JSBI.BigInt(40))
+          JSBI.leftShift(JSBI.BigInt(0x20), JSBI.BigInt(56)),
+          JSBI.leftShift(JSBI.BigInt(length), JSBI.BigInt(40)),
         ),
         JSBI.leftShift(JSBI.BigInt(index), JSBI.BigInt(24)),
       ),
