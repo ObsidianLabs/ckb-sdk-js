@@ -8,7 +8,10 @@ type TransactionHash = string
 type CachedLock = Pick<CachedCell, 'lock'>
 
 export interface SignWitnesses {
-  (key: SignatureProvider): (params: { transactionHash: TransactionHash; witnesses: StructuredWitness[] }) => Promise<StructuredWitness[]>
+  (key: SignatureProvider): (params: {
+    transactionHash: TransactionHash
+    witnesses: StructuredWitness[]
+  }) => Promise<StructuredWitness[]>
   (key: Map<LockHash, SignatureProvider>): (params: {
     transactionHash: TransactionHash
     witnesses: StructuredWitness[]
@@ -42,15 +45,16 @@ const signWitnesses: SignWitnesses = (key: SignatureProvider | Map<LockHash, Sig
     const rawWitnesses = witnesses
     const restWitnesses = witnesses.slice(inputCells.length)
     const groupedScripts = groupScripts(inputCells)
+    // eslint-disable-next-line no-restricted-syntax
     for (const [lockhash, indices] of groupedScripts) {
       const sk = key.get(lockhash)
-      if (!sk) {
-        throw new Error(`The signature provider to sign lockhash ${lockhash} is not found`)
-      }
-      const ws = [...indices.map(idx => witnesses[idx]), ...restWitnesses]
+      if (sk) {
+        const ws = [...indices.map((idx) => witnesses[idx]), ...restWitnesses]
 
-      const witnessIncludeSignature = await signWitnessGroup(sk, transactionHash, ws)[0]
-      rawWitnesses[indices[0]] = witnessIncludeSignature
+        // eslint-disable-next-line no-await-in-loop
+        const witnessIncludeSignature = (await signWitnessGroup(sk, transactionHash, ws))[0]
+        rawWitnesses[indices[0]] = witnessIncludeSignature
+      }
     }
     return rawWitnesses
   }
